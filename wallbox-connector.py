@@ -23,7 +23,6 @@ config_object = ConfigParser()
 config_object.read("config.ini")
 
 general_Config = config_object["general"]
-MQTT_Config = config_object["MQTT Broker Config"]
 Modbus_Config = config_object["Modbus Config"]
 
 
@@ -31,8 +30,7 @@ Modbus_Config = config_object["Modbus Config"]
 #   MQTT Config
 ######################################
 
-client = mqtt.Client()
-client.username_pw_set(username=MQTT_Config["user"], password=MQTT_Config["password"])
+client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
 
 ######################################
 #   Modbus Config
@@ -88,6 +86,10 @@ filelog.setFormatter(fileformatter)
 filelog.rotator = GZipRotator()
 rootlogger.addHandler(filelog)
 
+consoleHandler = logging.StreamHandler()
+consoleHandler.setFormatter(fileformatter)
+rootlogger.addHandler(consoleHandler)
+
 #setup logging to console
 #console = logging.StreamHandler()
 #console.setLevel(logging.DEBUG)
@@ -108,7 +110,7 @@ def get_time():
     now = (datetime.datetime.now()).strftime("%Y-%m-%d %H:%M:%S")
     return now    
 
-def on_connect(client, userdata, flags, rc):
+def on_connect(client, userdata, flags, rc, properties):
     logger.debug("Connected with result code " + str(rc))
     advertize_device()
     
@@ -151,7 +153,7 @@ def on_message_maxCurrent(client, userdata, message):
 client.message_callback_add("homie/Heidelberg-Wallbox/wallbox/max_current/set", on_message_maxCurrent)
 client.on_connect = on_connect
 try:
-    client.connect(MQTT_Config["broker_IP"], int(MQTT_Config["broker_port"]), 60)
+    client.connect("192.168.0.10", 1883, 60)
 except:
     logger.info("Could not connect to MQTT Broker")  
 client.loop_start()
