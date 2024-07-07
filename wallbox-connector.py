@@ -10,6 +10,7 @@ import gzip
 import os
 from configparser import ConfigParser
 
+from heidelberg import wallbox
 
 ######################################
 #
@@ -36,16 +37,7 @@ client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
 #   Modbus Config
 ######################################
 
-# port name, slave address (in decimal)
-wallbox = minimalmodbus.Instrument( Modbus_Config["usb_device"] , 5, mode='rtu')  #USB Device und Modbus Client ID
-wallbox.serial.baudrate = 19200
-wallbox.serial.bytesize = 8
-wallbox.serial.parity   = serial.PARITY_EVEN
-wallbox.serial.stopbits = 1
-wallbox.serial.timeout = 0.500  # seconds max to wait for answer
-#wallbox.debug = True
-wallbox.mode = minimalmodbus.MODE_RTU
-
+wb = wallbox(Modbus_Config["usb_device"], 1)
 maxCurrent = 0  # Initial maxCurrent, will be replaced by value from mqtt
 
 ######################################
@@ -168,22 +160,19 @@ def loop():
         ######################################
         #    Deactivate Watchdog Timeout
         ######################################
-        try:
-            wallbox.write_register(registeraddress=257, value=0, numberOfDecimals=0, functioncode=6, signed=False)
-        except:
-            logger.info("Could not write to Modbus to deactivate Watchdog timeout")
+#        try:
+#            wallbox.write_register(registeraddress=257, value=0, numberOfDecimals=0, functioncode=6, signed=False)
+#        except:
+#            logger.info("Could not write to Modbus to deactivate Watchdog timeout")
         
         ######################################
         #   Send max Current to Wallbox
         ######################################
         try:
             logger.info("Set max current to: " + str(maxCurrent) + " A")  
-            wallbox.write_register(registeraddress=261, value=(maxCurrent*10), numberOfDecimals=0, functioncode=6, signed=False)
-            
-        except IOError:
-            logger.info("Writing max current to Wallbox failed, probably standby")  
-        try:
+            wb.set_current_preset(maxCurrent)            
             client.publish("homie/Heidelberg-Wallbox/wallbox/max_current", maxCurrent, 0, True)
+
         except:
             logger.info("Something wrong while sending max Current to MQTT")  
         
@@ -193,12 +182,10 @@ def loop():
         ######################################
         try:
             #Total Energy
-            Reg_17 = wallbox.read_register(registeraddress=17, numberOfDecimals=0, functioncode=4, signed=False)  #hight Byte
-            Reg_18 = wallbox.read_register(registeraddress=18, numberOfDecimals=0, functioncode=4, signed=False)  #low Byte
-            WallboxZaehlerstand = (Reg_17 * 2**16 + Reg_18) / 1000   
-        
+            WallboxZaehlerstand = wb.get_total_energy() 
+    
             # Current Power    
-            Adr_14 = wallbox.read_register(registeraddress=14, numberOfDecimals=0, functioncode=4, signed=False)
+            Adr_14 = wb.get_power()
         
             logger.info("WALLBOX,Zähler=Wallbox Zählerstand=" + str(WallboxZaehlerstand) + ",aktueller_verbrauch=" + str(Adr_14))  
             
