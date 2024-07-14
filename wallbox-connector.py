@@ -165,7 +165,7 @@ def loop():
 #        except:
 #            logger.info("Could not write to Modbus to deactivate Watchdog timeout")
         
-        logger.info("Watchdog Time out is " + str(wb.get_watchdog_timeout) + " ms")
+        #logger.info("Watchdog Time out is " + str(wb.get_watchdog_timeout) + " ms")
 
         ######################################
         #   Send max Current to Wallbox
@@ -199,7 +199,7 @@ def loop():
             client.publish("homie/Heidelberg-Wallbox/wallbox/akt_verbrauch", Adr_14, 0, False)
             client.publish("homie/Heidelberg-Wallbox/wallbox/zaehlerstand", WallboxZaehlerstand, 0, True)
 
-            client.publish("homie/Heidelberg-Wallbox/$state", wb.get_state, 1, True)
+            client.publish("homie/Heidelberg-Wallbox/$state", wb.get_state(), 1, True)
         
         except IOError:
             logger.info("Reading Wallbox failed, probably standby")  
