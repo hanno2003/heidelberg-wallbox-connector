@@ -201,6 +201,8 @@ def loop():
 
             client.publish("homie/Heidelberg-Wallbox/$state", wb.get_state(), 1, True)
         
+            logging.info("Wallbox Status: " + wb.status_as_goe())
+
         except IOError:
             logger.info("Reading Wallbox failed, probably standby")  
         except:
@@ -217,8 +219,10 @@ except:
     client.publish("homie/Heidelberg-Wallbox/$state", "disconnected", 1, True)
     client.disconnect()
     client.loop_stop()
+    wb.set_current_preset(0) 
 finally:
     logger.info("------------ Stopping client ------------")
     client.publish("homie/Heidelberg-Wallbox/$state", "disconnected", 1, True)
     client.disconnect()
     client.loop_stop()
+    wb.set_current_preset(0)
