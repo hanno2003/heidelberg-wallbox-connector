@@ -39,6 +39,8 @@ client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
 
 wb = wallbox(Modbus_Config["usb_device"], 1)
 maxCurrent = 0  # Initial maxCurrent, will be replaced by value from mqtt
+#wb._reInitialize()
+#wb.set_current_preset(maxCurrent)
 
 ######################################
 
@@ -160,12 +162,15 @@ def loop():
         ######################################
         #    Deactivate Watchdog Timeout
         ######################################
-#        try:
-#            wallbox.write_register(registeraddress=257, value=0, numberOfDecimals=0, functioncode=6, signed=False)
-#        except:
-#            logger.info("Could not write to Modbus to deactivate Watchdog timeout")
+        #try:
+        #    wb.set_watchdog_timeout(0)
+
+        #    wallbox.write_register(registeraddress=257, value=0, numberOfDecimals=0, functioncode=6, signed=False)
+        #    wb.
+        #except:
+        #     logger.info("Could not write to Modbus to deactivate Watchdog timeout")
         
-        #logger.info("Watchdog Time out is " + str(wb.get_watchdog_timeout) + " ms")
+        logger.info("Watchdog Time out is " + str(wb.get_watchdog_timeout()) + " ms")
 
         ######################################
         #   Send max Current to Wallbox
@@ -200,8 +205,11 @@ def loop():
             client.publish("homie/Heidelberg-Wallbox/wallbox/zaehlerstand", WallboxZaehlerstand, 0, True)
 
             client.publish("homie/Heidelberg-Wallbox/$state", wb.get_state(), 1, True)
+
+            state = wb.get_state()
         
-            logging.info("Wallbox Status: " + wb.status_as_goe())
+            logging.info("Wallbox State: " + str(state))
+            #logging.info("Wallbox Status: " + wb.status_as_goe())
 
         except IOError:
             logger.info("Reading Wallbox failed, probably standby")  
