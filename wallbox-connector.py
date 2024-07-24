@@ -207,9 +207,22 @@ def loop():
             client.publish("homie/Heidelberg-Wallbox/$state", wb.get_state(), 1, True)
 
             state = wb.get_state()
-        
+
             logging.info("Wallbox State: " + str(state))
-            #logging.info("Wallbox Status: " + wb.status_as_goe())
+            if state == 2:
+                logging.info("No Vehicle Connected, Wallbox doesn't allow charging")
+            elif state == 3:
+                logging.info("No Vehicle Connected, Wallbox allows charging")
+            elif state == 4:
+                logging.info("Vehicle Connected without Charging request, Wallbox doesn't allow charging")
+            elif state == 5:
+                logging.info("Vehicle Connected without Charging request, Wallbox allows charging")
+            elif state == 6:
+                logging.info("Vehicle Connected with Charging request, Wallbox doesn't allow charging")
+            elif state == 7:
+                logging.info("Vehicle Connected with Charging request, Wallbox allows charging")
+            elif state == 9:
+                logging.info("Error state")
 
         except IOError:
             logger.info("Reading Wallbox failed, probably standby")  

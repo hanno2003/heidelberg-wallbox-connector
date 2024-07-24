@@ -2,3 +2,4 @@ config.ini
 env
 logs/*
 __pycache__/*
+.idea/*
