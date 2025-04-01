@@ -15,3 +15,6 @@ Values are published to MQTT in homie Standard and are easy integratable into op
 * A cheap RS485 Modbus USB Stick to connect the Wallbox to the Linux System where you run the script
 * Heidelberg Energy Control Wallbox
 * wired connection from Modbus Stick to Wallbox (2 wires)
+
+### How to run
+* Copy ```config.ini.sample``` to ```config.ini```

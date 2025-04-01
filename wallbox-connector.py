@@ -10,6 +10,7 @@ import gzip
 import os
 from configparser import ConfigParser
 
+from heidelberg import wallbox
 
 ######################################
 #
@@ -23,32 +24,23 @@ config_object = ConfigParser()
 config_object.read("config.ini")
 
 general_Config = config_object["general"]
-MQTT_Config = config_object["MQTT Broker Config"]
+mqtt_config = config_object["MQTT Broker Config"]
 Modbus_Config = config_object["Modbus Config"]
-
 
 ######################################
 #   MQTT Config
 ######################################
 
-client = mqtt.Client()
-client.username_pw_set(username=MQTT_Config["user"], password=MQTT_Config["password"])
+client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
 
 ######################################
 #   Modbus Config
 ######################################
 
-# port name, slave address (in decimal)
-wallbox = minimalmodbus.Instrument( Modbus_Config["usb_device"] , 5, mode='rtu')  #USB Device und Modbus Client ID
-wallbox.serial.baudrate = 19200
-wallbox.serial.bytesize = 8
-wallbox.serial.parity   = serial.PARITY_EVEN
-wallbox.serial.stopbits = 1
-wallbox.serial.timeout = 0.500  # seconds max to wait for answer
-#wallbox.debug = True
-wallbox.mode = minimalmodbus.MODE_RTU
-
+wb = wallbox(Modbus_Config["usb_device"], 1)
 maxCurrent = 0  # Initial maxCurrent, will be replaced by value from mqtt
+#wb._reInitialize()
+#wb.set_current_preset(maxCurrent)
 
 ######################################
 
@@ -88,17 +80,12 @@ filelog.setFormatter(fileformatter)
 filelog.rotator = GZipRotator()
 rootlogger.addHandler(filelog)
 
-#setup logging to console
-#console = logging.StreamHandler()
-#console.setLevel(logging.DEBUG)
-#formatter = logging.Formatter('%(asctime)s %(levelname)-8s %(message)s')
-#console.setFormatter(formatter)
-#rootlogger.addHandler(console)
+consoleHandler = logging.StreamHandler()
+consoleHandler.setFormatter(fileformatter)
+rootlogger.addHandler(consoleHandler)
 
 #get a logger for my script
 logger = logging.getLogger(__name__)
-
-
 
 ######################################
 #   Homie Initialisierung
@@ -108,7 +95,7 @@ def get_time():
     now = (datetime.datetime.now()).strftime("%Y-%m-%d %H:%M:%S")
     return now    
 
-def on_connect(client, userdata, flags, rc):
+def on_connect(client, userdata, flags, rc, properties):
     logger.debug("Connected with result code " + str(rc))
     advertize_device()
     
@@ -151,7 +138,9 @@ def on_message_maxCurrent(client, userdata, message):
 client.message_callback_add("homie/Heidelberg-Wallbox/wallbox/max_current/set", on_message_maxCurrent)
 client.on_connect = on_connect
 try:
-    client.connect(MQTT_Config["broker_IP"], int(MQTT_Config["broker_port"]), 60)
+    client.connect(mqtt_config["broker_IP"], 
+                   mqtt_config["broker_port"], 
+                   60)
 except:
     logger.info("Could not connect to MQTT Broker")  
 client.loop_start()
@@ -166,22 +155,24 @@ def loop():
         ######################################
         #    Deactivate Watchdog Timeout
         ######################################
-        try:
-            wallbox.write_register(registeraddress=257, value=0, numberOfDecimals=0, functioncode=6, signed=False)
-        except:
-            logger.info("Could not write to Modbus to deactivate Watchdog timeout")
+        #try:
+        #    wb.set_watchdog_timeout(0)
+
+        #    wallbox.write_register(registeraddress=257, value=0, numberOfDecimals=0, functioncode=6, signed=False)
+        #    wb.
+        #except:
+        #     logger.info("Could not write to Modbus to deactivate Watchdog timeout")
         
+        logger.info("Watchdog Time out is " + str(wb.get_watchdog_timeout()) + " ms")
+
         ######################################
         #   Send max Current to Wallbox
         ######################################
         try:
             logger.info("Set max current to: " + str(maxCurrent) + " A")  
-            wallbox.write_register(registeraddress=261, value=(maxCurrent*10), numberOfDecimals=0, functioncode=6, signed=False)
-            
-        except IOError:
-            logger.info("Writing max current to Wallbox failed, probably standby")  
-        try:
+            wb.set_current_preset(maxCurrent)            
             client.publish("homie/Heidelberg-Wallbox/wallbox/max_current", maxCurrent, 0, True)
+
         except:
             logger.info("Something wrong while sending max Current to MQTT")  
         
@@ -191,15 +182,13 @@ def loop():
         ######################################
         try:
             #Total Energy
-            Reg_17 = wallbox.read_register(registeraddress=17, numberOfDecimals=0, functioncode=4, signed=False)  #hight Byte
-            Reg_18 = wallbox.read_register(registeraddress=18, numberOfDecimals=0, functioncode=4, signed=False)  #low Byte
-            WallboxZaehlerstand = (Reg_17 * 2**16 + Reg_18) / 1000   
-        
+            WallboxZaehlerstand = wb.get_total_energy() 
+    
             # Current Power    
-            Adr_14 = wallbox.read_register(registeraddress=14, numberOfDecimals=0, functioncode=4, signed=False)
+            Adr_14 = wb.get_power()
         
             logger.info("WALLBOX,Zähler=Wallbox Zählerstand=" + str(WallboxZaehlerstand) + ",aktueller_verbrauch=" + str(Adr_14))  
-            
+
             
             ######################################
             #   Homie publish
@@ -207,7 +196,27 @@ def loop():
         
             client.publish("homie/Heidelberg-Wallbox/wallbox/akt_verbrauch", Adr_14, 0, False)
             client.publish("homie/Heidelberg-Wallbox/wallbox/zaehlerstand", WallboxZaehlerstand, 0, True)
-        
+
+            client.publish("homie/Heidelberg-Wallbox/$state", wb.get_state(), 1, True)
+
+            state = wb.get_state()
+
+            logging.info("Wallbox State: " + str(state))
+            if state == 2:
+                logging.info("No Vehicle Connected, Wallbox doesn't allow charging")
+            elif state == 3:
+                logging.info("No Vehicle Connected, Wallbox allows charging")
+            elif state == 4:
+                logging.info("Vehicle Connected without Charging request, Wallbox doesn't allow charging")
+            elif state == 5:
+                logging.info("Vehicle Connected without Charging request, Wallbox allows charging")
+            elif state == 6:
+                logging.info("Vehicle Connected with Charging request, Wallbox doesn't allow charging")
+            elif state == 7:
+                logging.info("Vehicle Connected with Charging request, Wallbox allows charging")
+            elif state == 9:
+                logging.info("Error state")
+
         except IOError:
             logger.info("Reading Wallbox failed, probably standby")  
         except:
@@ -224,8 +233,10 @@ except:
     client.publish("homie/Heidelberg-Wallbox/$state", "disconnected", 1, True)
     client.disconnect()
     client.loop_stop()
+    wb.set_current_preset(0) 
 finally:
     logger.info("------------ Stopping client ------------")
     client.publish("homie/Heidelberg-Wallbox/$state", "disconnected", 1, True)
     client.disconnect()
     client.loop_stop()
+    wb.set_current_preset(0)
